@@ -1,0 +1,226 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Example of plotting live data with websockets and highcharts</title>
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js" integrity="sha512-Y5n0fbohPllOQ21fTwM/h9sQQ/1a1h5KhweGhu2zwD8lAoJnTgVa7NIrFa1bRDIMQHixtyuRV2ubIx+qWbGdDA==" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+  <script type="text/javascript"> 
+    //var MQTTbroker = '172.22.25.21';
+    //var MQTTport = 9001;
+    //var MQTTsubTopic = 'edgex/data'; //works with wildcard # and + topics dynamically now
+    var MQTTbroker;
+    var MQTTport;
+    var MQTTsubTopic;
+    var chart; // global variuable for chart
+    var totalmsg = 0;
+    var client = null;
+  //can be used to reconnect on connection lost
+    function onConnectionLost(responseObject) {
+      console.log("connection lost: " + responseObject.errorMessage);
+      //window.setTimeout(location.reload(),20000); //wait 20seconds before trying to connect again.
+      let $connected = $("#connected")
+      let $connectedBtn = $("#mqttConnect")
+      let $DisconnectedBtn = $("#mqttDisconnect")
+  
+      $connected.addClass("badge-danger").removeClass("badge-success")
+      $connected.html("Disconnected")
+      $connectedBtn.removeClass("d-none")
+      $DisconnectedBtn.addClass("d-none")
+      client = null
+    };
+
+  //what is done when a message arrives from the broker
+    function onMessageArrived(message) {
+      totalmsg++;
+      document.getElementById('counter').innerHTML = totalmsg;
+      //console.log(MQTTsubTopic, message.payloadString);
+      var jobj = JSON.parse(message.payloadString);
+      var myEpoch = jobj.created
+      var myliveEpoch = new Date().getTime(); //get current epoch time
+      var thenum = jobj.readings[0].value
+      var plotMqtt = [myEpoch, Number(thenum)]; //create the array
+      var plotliveMqtt = [myliveEpoch, Number(thenum)]; //create the array
+      plot(plotMqtt, 0);	//send it to the plot function
+      plot(plotliveMqtt, 1);	//send it to the plot function
+    };
+
+    //function that is called once the document has loaded
+    function connect() {
+      //mqtt broker
+      MQTTbroker = document.getElementById("host").value;
+      MQTTport = document.getElementById("port").value;
+      MQTTsubTopic = document.getElementById("topic").value;
+      console.log("connect to %s:%s, topic: %s", MQTTbroker, MQTTport, MQTTsubTopic);
+      client = new Paho.Client(MQTTbroker, Number(MQTTport),
+          "myclientid_" + parseInt(Math.random() * 100, 10));
+      client.onMessageArrived = onMessageArrived;
+      client.onConnectionLost = onConnectionLost;
+
+      //mqtt connecton options including the mqtt broker subscriptions
+      var options = {
+        timeout: 3,
+        onSuccess: function () {
+          console.log("mqtt connected");
+
+          let $connected = $("#connected")
+          let $connectedBtn = $("#mqttConnect")
+          let $DisconnectedBtn = $("#mqttDisconnect")
+          $connected.removeClass("badge-danger").addClass("badge-success")
+          $connected.html("Connected")
+          $connectedBtn.addClass("d-none")
+          $DisconnectedBtn.removeClass("d-none")
+
+          if(MQTTsubTopic != "#") {
+            client.publish(MQTTsubTopic, "", 0, true); // clear retained
+          }
+          // Connection succeeded; subscribe to our topics
+          //client.subscribe(MQTTsubTopic, {qos: 1});
+          client.subscribe(MQTTsubTopic, {qos: 0});
+        },
+        onFailure: function (message) {
+          console.log("Connection failed, ERROR: " + message.errorMessage);
+          //window.setTimeout(location.reload(),20000); //wait 20seconds before trying to connect again.
+        }
+      };
+
+        //i find i have to set this to false if i have trouble with timezones.
+      Highcharts.setOptions({
+        global: {
+          useUTC: false
+        }
+      });
+
+      // Connect to MQTT broker
+      client.connect(options);
+    };
+
+    function disconnect() {
+      client.disconnect()
+      let $connected = $("#connected")
+      let $connectedBtn = $("#mqttConnect")
+      let $DisconnectedBtn = $("#mqttDisconnect")
+  
+      $connected.addClass("badge-danger").removeClass("badge-success")
+      $connected.html("Disconnected")
+      $connectedBtn.removeClass("d-none")
+      $DisconnectedBtn.addClass("d-none")
+
+      client = null
+    }
+
+    //this adds the plots to the chart
+    function plot(point, chartno) {
+      //console.log(point);
+
+      var shift = false;
+          //shift = series.data.length > 100; // shift if the series is
+                                               // longer than 100
+      // add the point
+      chart.series[chartno].addPoint(point, true, shift);
+    };
+
+    //settings for the chart
+    $(document).ready(function() {
+        chart = new Highcharts.Chart({
+            chart: {
+                renderTo: 'chartcontainer',
+                defaultSeriesType: 'spline'
+            },
+            title: {
+                text: 'Plotting Live websockets data from a MQTT topic (created time)'
+            },
+            subtitle: {
+                                  text: 'broker: ' + MQTTbroker + ' | port: ' + MQTTport + ' | topic : ' + MQTTsubTopic
+                          },
+            xAxis: {
+                type: 'datetime',
+                tickPixelInterval: 150,
+                maxZoom: 20 * 1000
+            },
+            yAxis: {
+                minPadding: 0.2,
+                maxPadding: 0.2,
+                title: {
+                    text: 'Value',
+                    margin: 80
+                }
+            },
+            series: []
+        });
+        //create new data series for the chart
+        var newseries = {
+          id: 0,
+          name: "Created time",
+          data: []
+        };
+        chart.addSeries(newseries); //add the series
+
+        var newliveseries = {
+          id: 1,
+          name: "Received time",
+          data: []
+        };
+        chart.addSeries(newliveseries); //add the series
+
+        $("#mqttConnect").on('click', connect);
+        $("#mqttDisconnect").on('click', disconnect);
+    });
+  </script>
+
+  <script src="http://code.highcharts.com/stock/highstock.js"></script>
+  <script src="http://code.highcharts.com/stock/modules/exporting.js"></script>
+</head>
+<body>
+<!-- Start the javascript ball rolling and connect to the mqtt broker
+<body onload="connect();">
+-->
+  <div class="container">
+    <div class="row">
+        <div class="col">
+          <div class="form-group">
+                <label for="host">Host</label>
+                <input type="text" class="form-control" id="host">
+                <small class="form-text text-muted">MQTT Broker IP or Domain Name</small>
+          </div>
+        </div>
+        <div class="col">
+          <div class="form-group">
+                <label for="port">Port</label>
+                <input type="text" class="form-control" id="port">
+                <small class="form-text text-muted">MQTT Broker Web Sockets Port</small>
+          </div>
+        </div>
+        <div class="col">
+          <div class="form-group">
+                <label for="topic">Topic</label>
+                <input type="text" class="form-control" value="#" id="topic">
+                <small class="form-text text-muted"></small>
+          </div>   
+        </div>
+    </div>
+    <div class="row">
+      <div class="col-4">
+      </div>
+      <div class="col">
+        <button class="btn btn-primary" id="mqttConnect">Connect</button>
+        <button class="btn btn-danger d-none" id="mqttDisconnect">Disconnect</button>
+      </div>
+      <div class="col">
+        <label>State:
+          <span class="badge badge-pill badge-danger" id="connected">Disconnected</span>
+        </label>
+        <label>Received :
+          <span id="counter">0</span>
+        </label>
+      </div>
+      <div class="col-4">
+      </div>
+    </div>
+    <div id="chartcontainer" style="height: 500px; min-width: 500px"></div><!-- this the placeholder for the chart-->
+  </div>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+</body>
+</html>

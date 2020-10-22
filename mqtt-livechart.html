@@ -91,6 +91,7 @@
           useUTC: false
         }
       });
+      chart.setTitle(null, {text: 'broker: ' + MQTTbroker + ' | port: ' + MQTTport + ' | topic : ' + MQTTsubTopic });   
 
       // Connect to MQTT broker
       client.connect(options);
@@ -136,15 +137,16 @@
                           },
             xAxis: {
                 type: 'datetime',
-                tickPixelInterval: 150,
+                tickPixelInterval: 50,
                 maxZoom: 20 * 1000
             },
             yAxis: {
                 minPadding: 0.2,
                 maxPadding: 0.2,
+                tickPixelInterval: 30,
                 title: {
                     text: 'Value',
-                    margin: 80
+                    margin: 30
                 }
             },
             series: []

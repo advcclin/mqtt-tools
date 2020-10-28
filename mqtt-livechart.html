@@ -36,12 +36,18 @@
       totalmsg++;
       document.getElementById('counter').innerHTML = totalmsg;
       //console.log(MQTTsubTopic, message.payloadString);
-      var jobj = JSON.parse(message.payloadString);
+      var jobj
+      try {
+        jobj = JSON.parse(message.payloadString);
+      } catch(ex){
+        return null;
+      }
       var myEpoch = jobj.created
       var myliveEpoch = new Date().getTime(); //get current epoch time
       var thenum = jobj.readings[0].value
       var plotMqtt = [myEpoch, Number(thenum)]; //create the array
       var plotliveMqtt = [myliveEpoch, Number(thenum)]; //create the array
+      document.getElementById('getValue').innerHTML = thenum;
       plot(plotMqtt, 0);	//send it to the plot function
       plot(plotliveMqtt, 1);	//send it to the plot function
     };
@@ -53,8 +59,10 @@
       MQTTport = document.getElementById("port").value;
       MQTTsubTopic = document.getElementById("topic").value;
       console.log("connect to %s:%s, topic: %s", MQTTbroker, MQTTport, MQTTsubTopic);
+      let cid = "myclientid_" + (Math.floor((Math.random() * 100000) + 1));
       client = new Paho.Client(MQTTbroker, Number(MQTTport),
-          "myclientid_" + parseInt(Math.random() * 100, 10));
+          "myclientid_" + cid);
+      console.log("clientID: " + cid)
       client.onMessageArrived = onMessageArrived;
       client.onConnectionLost = onConnectionLost;
 
@@ -213,11 +221,15 @@
         <label>State:
           <span class="badge badge-pill badge-danger" id="connected">Disconnected</span>
         </label>
+      </div>
+      <div class="col-4">
         <label>Received :
           <span id="counter">0</span>
         </label>
-      </div>
-      <div class="col-4">
+        <br>
+        <label>Value :
+          <span id="getValue">0</span>
+        </label>
       </div>
     </div>
     <div id="chartcontainer" style="height: 500px; min-width: 500px"></div><!-- this the placeholder for the chart-->
